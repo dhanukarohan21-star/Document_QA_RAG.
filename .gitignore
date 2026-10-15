@@ -1,5 +1,18 @@
+
 .env
-.streamlit/secrets.toml
 .venv/
 __pycache__/
-*.pyc
+.ipynb_checkpoints/
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+if not os.getenv("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
+
+
+"):
+    raise ValueError("Please configure OPENAI_API_KEY in your .env file.")
+    
+
+

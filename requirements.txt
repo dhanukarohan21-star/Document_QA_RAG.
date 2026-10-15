@@ -1,18 +1,22 @@
 
-langchain
-langchain-core
-langchain-community
-langchain-google-genai
-langgraph
-yfinance
-pandas
-numpy
-feedparser
-faiss-cpu
+llama-index
+llama-index-embeddings-huggingface
 sentence-transformers
+langchain
+langchain-openai
+pypdf
 python-dotenv
 streamlit
-matplotlib
+ipykernel
 
+llama-index
+llama-index-embeddings-huggingface
+sentence-transformers
+langchain
+langchain-openai
+pypdf
+python-dotenv
+streamlit
+ipykernel
 
 

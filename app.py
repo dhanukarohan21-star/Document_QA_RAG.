@@ -1,131 +1,110 @@
-import os
-import tempfile
-from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
-from llama_index.core import Settings, SimpleDirectoryReader, VectorStoreIndex
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
 
-st.set_page_config(page_title="Document QA Assistant")
-st.title("AI Document Question Answering System")
-st.write("Upload documents and ask questions about their contents.")
+from stock_assistant import stock_graph
 
-api_key = os.getenv("OPENAI_API_KEY")
-
-uploaded_files = st.file_uploader(
-	"Upload PDF or TXT documents",
-	type=["pdf", "txt"],
-	accept_multiple_files=True
+st.set_page_config(
+	page_title="AI Stock Market Assistant",
+	page_icon="📈",
+	layout="wide"
 )
 
-top_k = st.slider("Retrieved passages", 1, 8, 4)
+st.title("AI Stock Market Assistant")
+st.caption("LangChain + LangGraph + Gemini + RAG")
 
+st.warning(
+	"Educational simulation only. "
+	"This is not financial advice."
+)
 
-@st.cache_resource
-def get_embedding_model():
-	return HuggingFaceEmbedding(
-		model_name="sentence-transformers/all-MiniLM-L6-v2"
+with st.sidebar:
+	st.header("Stock Configuration")
+
+	ticker = st.text_input(
+		"Stock ticker",
+		value="RELIANCE.NS"
+	).strip().upper()
+
+	company = st.text_input(
+		"Company name",
+		value="Reliance Industries"
+	).strip()
+
+	analyze = st.button(
+		"Analyze Stock",
+		type="primary"
 	)
 
+if analyze:
+	if not ticker or not company:
+		st.error("Enter both a ticker and company name.")
 
-if st.button("Build document index"):
-	if not uploaded_files:
-		st.error("Upload at least one PDF or TXT file.")
 	else:
 		try:
-			with st.spinner("Reading and indexing documents..."):
-				with tempfile.TemporaryDirectory() as folder:
-					for file in uploaded_files:
-						name = Path(file.name).name
-						Path(folder, name).write_bytes(file.getvalue())
+			with st.spinner(
+				"Running stock data, news, and AI agents..."
+			):
+				result = stock_graph.invoke({
+					"ticker": ticker,
+					"company_name": company
+				})
 
-					Settings.embed_model = get_embedding_model()
+			market = result.get("market_data", {})
 
-					docs = SimpleDirectoryReader(
-						input_dir=folder,
-						required_exts=[".pdf", ".txt"]
-					).load_data()
+			if market:
+				col1, col2, col3 = st.columns(3)
 
-					if not docs:
-						raise ValueError("No readable document text found.")
+				col1.metric(
+					"Latest historical close",
+					f"{market['latest_close']:.2f}"
+				)
 
-					st.session_state["index"] = VectorStoreIndex.from_documents(
-						docs,
-						show_progress=True
+				col2.metric(
+					"Historical period return",
+					f"{market['period_return_pct']:.2f}%"
+				)
+
+				col3.metric(
+					"Observations",
+					market.get("observations", 0)
+				)
+
+				st.caption(
+					"Latest available date: "
+					+ market.get("latest_date", "Unknown")
+				)
+
+			st.subheader("AI Insights")
+			st.write(result.get("insight_report", ""))
+
+			st.subheader("Simulated Recommendation")
+			st.write(result.get("recommendation", "HOLD"))
+
+			st.subheader("Risk Analysis")
+			st.write(result.get("risk_report", ""))
+
+			st.subheader("Final Analysis Report")
+			st.text(result.get("final_report", ""))
+
+			st.subheader("Retrieved Financial News")
+
+			articles = result.get("news_articles", [])
+
+			if articles:
+				for article in articles:
+					st.markdown(
+						f"- [{article['title']}]"
+						f"({article['link']})"
 					)
+			else:
+				st.info("No news articles were retrieved.")
 
-			st.success("Documents indexed successfully!")
-
-		except Exception as e:
-			st.error(f"Indexing failed: {e}")
-
-if "index" in st.session_state:
-	question = st.text_input("Enter your question")
-
-	if st.button("Get answer"):
-		if not api_key:
-			st.error("Configure OPENAI_API_KEY in your .env file.")
-		elif not question.strip():
-			st.warning("Please enter a question.")
-		else:
-			try:
-				with st.spinner("Searching and generating answer..."):
-					nodes = st.session_state["index"].as_retriever(
-						similarity_top_k=top_k
-					).retrieve(question)
-
-					if not nodes:
-						st.info("No relevant passages were found.")
-					else:
-						context = "\n\n".join(
-							f"[Source {i}] "
-							f"{item.node.metadata.get('file_name', 'Document')}\n"
-							f"{item.node.get_content()}"
-							for i, item in enumerate(nodes, start=1)
-						)
-
-						prompt = ChatPromptTemplate.from_messages([
-							(
-								"system",
-								"""Answer only from the supplied context.
-If the answer is missing, say you could not find it.
-Do not invent facts. Cite source labels when useful."""
-							),
-							(
-								"human",
-								"Context:\n{context}\n\nQuestion: {question}"
-							)
-						])
-
-						chain = (
-							prompt
-							| ChatOpenAI(
-								model="gpt-4o-mini",
-								temperature=0,
-								api_key=api_key
-							)
-							| StrOutputParser()
-						)
-
-						answer = chain.invoke({
-							"context": context,
-							"question": question
-						})
-
-						st.subheader("Answer")
-						st.write(answer)
-
-						st.subheader("Retrieved sources")
-						for i, item in enumerate(nodes, start=1):
-							with st.expander(f"Source {i}"):
-								st.write(item.node.metadata)
-								st.write(item.node.get_content())
-
-			except Exception as e:
-				st.error(f"Question answering failed: {e}")
+		except Exception as exc:
+			st.error(
+				"Analysis failed. Check the ticker, "
+				"internet connection, API key, and logs."
+			)
+			st.exception(exc)
